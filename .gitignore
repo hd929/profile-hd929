@@ -1,0 +1,9 @@
+node_modules/
+views.json
+viewed_ips.json
+.env
+.DS_Store
+Thumbs.db
+tmp*.txt
+temp.txt
+.backup/

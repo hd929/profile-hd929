@@ -1,0 +1,16 @@
+{
+  "name": "profile-hd929",
+  "version": "8.3.0",
+  "description": "Aji - H | Profile - Discord presence, BGM player & bio",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["profile", "discord", "lanyard"],
+  "author": "Aji - H",
+  "license": "MIT"
+}

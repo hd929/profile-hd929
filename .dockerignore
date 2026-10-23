@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+scratch
+tmp*.txt
+temp.txt
+.DS_Store
+Thumbs.db
