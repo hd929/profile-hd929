@@ -2,8 +2,8 @@
 // CARD MODULE: 3D Tilt, Gyroscope, Tabs, Easter Eggs
 // ==========================================
 
-import { createSparkles, isTouch } from './effects.js';
-import { showToast } from './core.js';
+import { createSparkles, isTouch } from './effects.js?v=9.3';
+import { showToast } from './core.js?v=9.3';
 
 const card = document.getElementById('card');
 const container = document.querySelector('.cards-container') || card?.parentElement;
@@ -92,7 +92,7 @@ export function initTabs() {
     // Mobile swipe to switch tabs (slide) — ignore when dragging games carousel
     const swipeArea = document.querySelector('.card-inner') || document.getElementById('tab-profile')?.parentElement;
     if (swipeArea) {
-        let startX = 0, startY = 0, isSwiping = false;
+        let startX = null, startY = 0, isSwiping = false;
         swipeArea.addEventListener('touchstart', (e) => {
             if (e.touches.length !== 1) return;
             if (e.target.closest('input, textarea, select, .bgm-player, .volume-slider, .timeline-slider, #bgm-volume, #bgm-progress-slider, .rotation-games-grid, .fav-game-card')) return;
@@ -101,13 +101,13 @@ export function initTabs() {
             isSwiping = false;
         }, { passive: true });
         swipeArea.addEventListener('touchmove', (e) => {
-            if (!startX) return;
+            if (startX === null) return;
             const dx = e.touches[0].clientX - startX;
             const dy = e.touches[0].clientY - startY;
             if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(dy) * 1.4) isSwiping = true;
         }, { passive: true });
         swipeArea.addEventListener('touchend', (e) => {
-            if (!isSwiping) { startX = 0; return; }
+            if (!isSwiping || startX === null) { startX = null; return; }
             const dx = e.changedTouches[0].clientX - startX;
             if (Math.abs(dx) > 60) {
                 const tabs = Array.from(document.querySelectorAll('.tab-btn'));
@@ -129,7 +129,7 @@ export function initTabs() {
                     });
                 }
             }
-            startX = 0; isSwiping = false;
+            startX = null; isSwiping = false;
         }, { passive: true });
     }
 }
@@ -195,7 +195,8 @@ export function initEasterEggs() {
     const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
     let konamiIndex = 0;
     window.addEventListener('keydown', (e) => {
-        if (e.key === konamiCode[konamiIndex]) {
+        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        if (key === konamiCode[konamiIndex]) {
             konamiIndex++;
             if (konamiIndex === konamiCode.length) {
                 konamiIndex = 0;

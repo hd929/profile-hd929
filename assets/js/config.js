@@ -10,7 +10,7 @@ const CONFIG = {
     userNote: 'ZB',
     memberSince: 'Member since July 4, 2018',
     clanTag: 'Mòe',
-    clanBadgeUrl: 'https://cdn.discordapp.com/clan-badges/1494099524745039902/c4f27af524ad1a956d8d99ae1a740dd6.png?size=64',
+    clanBadgeUrl: 'https://cdn.discordapp.com/clan-badges/1494099524745039902/66cde1189ceaa09f245177a95dade56c.png?size=64',
     avatarDecorationUrl: 'https://cdn.discordapp.com/avatar-decoration-presets/a_8cda4fb38c18ce7a3ccc513030148e24.png?size=256&passthrough=true',
     bannerColor: '#fec18f',
     badges: [
@@ -103,7 +103,6 @@ const CONFIG = {
             { icon: 'fa-solid fa-code', text: 'Coding & AI Engineering' }
         ]
     },
-    discordWebhookUrl: '',
     youtubePlaylistId: 'PLsDvPWj1sLN61RtOJQyXQowMt7rAo4nYd', // Playlist: "Cách Nhau Một Thế Giới"
     youtubePlaylistVideos: [
         'dQand4i7jyc', // giấc mơ tình cờ (w/ryuuko)

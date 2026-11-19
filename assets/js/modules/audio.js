@@ -2,7 +2,7 @@
 // AUDIO MODULE: BGM Player, YouTube IFrame API, Visualizer
 // ==========================================
 
-import { cfg, formatTime } from './core.js';
+import { cfg, formatTime } from './core.js?v=9.3';
 
 export const audio = document.getElementById('bg-audio') || document.getElementById('bgm-audio');
 export const bgmPlayer = document.getElementById('bgm-player');
@@ -23,8 +23,38 @@ export let isYouTubePlaylistActive = true;
 export let isShuffle = false;
 export let repeatMode = 'all'; // 'all', 'one', 'none'
 export let ytPlayer = null;
+let isYtReady = false;
 export let ytDuration = 0;
 export let ytInterval = null;
+export let playlistVideos = [];
+export let currentTrackIndex = 0;
+let _playlistSyncState = { id: '', synced: false, promise: null, usingFallback: false };
+
+function fetchFreshPlaylist(playlistId) {
+    if (!playlistId) return Promise.resolve(null);
+    if (_playlistSyncState.id === playlistId && _playlistSyncState.promise) {
+        return _playlistSyncState.promise;
+    }
+    const promise = fetch(`/api/youtube-playlist?id=${encodeURIComponent(playlistId)}`, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(json => {
+            if (json.success && Array.isArray(json.list) && json.list.length > 0) {
+                cfg.youtubePlaylistVideos = [...json.list];
+                playlistVideos = [...json.list];
+                _playlistSyncState.synced = true;
+                return playlistVideos;
+            }
+            return null;
+        })
+        .catch(() => null);
+    _playlistSyncState = { id: playlistId, synced: false, promise, usingFallback: false };
+    return promise;
+}
+
+// Prefetch fresh playlist immediately on page load (before user clicks entry)
+if (cfg.youtubePlaylistId) {
+    fetchFreshPlaylist(cfg.youtubePlaylistId);
+}
 export let dataArray = new Uint8Array(32);
 export let audioContext = null;
 export let analyser = null;
@@ -50,19 +80,43 @@ export function initAudioContext() {
 }
 
 let _lastSyncedVideoId = '';
+let _lastSyncedTitle = '';
+function setBgmTitle(title) {
+    if (!bgmTitleEl || !title) return;
+    const container = bgmTitleEl.parentElement;
+    bgmTitleEl.classList.remove('scrolling');
+    if (container) container.classList.remove('is-scrolling');
+    bgmTitleEl.textContent = title;
+
+    requestAnimationFrame(() => {
+        if (!container || !bgmTitleEl) return;
+        if (bgmTitleEl.scrollWidth > container.clientWidth + 2) {
+            bgmTitleEl.textContent = '';
+            const c1 = document.createElement('span');
+            c1.className = 'marquee-copy';
+            c1.textContent = title;
+            const c2 = document.createElement('span');
+            c2.className = 'marquee-copy';
+            c2.setAttribute('aria-hidden', 'true');
+            c2.textContent = title;
+            bgmTitleEl.appendChild(c1);
+            bgmTitleEl.appendChild(c2);
+            bgmTitleEl.classList.add('scrolling');
+            container.classList.add('is-scrolling');
+        }
+    });
+}
+
 export function syncYouTubeTrackInfo() {
     if (!ytPlayer || !ytPlayer.getVideoData) return;
     const vData = ytPlayer.getVideoData();
     if (!vData) return;
     const vidId = vData.video_id;
     const title = vData.title;
-    if (title && (vidId !== _lastSyncedVideoId || (bgmTitleEl && !bgmTitleEl.textContent.includes(title)))) {
+    if (title && (vidId !== _lastSyncedVideoId || title !== _lastSyncedTitle)) {
         _lastSyncedVideoId = vidId || '';
-        // Seamless marquee: duplicate title with separator to avoid long gap
-        const dupTitle = `${title}     •     ${title}`;
-        if (bgmTitleEl && bgmTitleEl.textContent !== dupTitle) {
-            bgmTitleEl.textContent = dupTitle;
-        }
+        _lastSyncedTitle = title;
+        setBgmTitle(title);
         if (vidId && bgmCoverImg) {
             const newCover = `https://img.youtube.com/vi/${vidId}/maxresdefault.jpg`;
             if (bgmCoverImg.src !== newCover) {
@@ -140,78 +194,107 @@ export function playYouTubeTrack(videoId, autoPlay = true) {
     }
 }
 
+export function playPlaylistIndex(index, autoPlay = true) {
+    if (!playlistVideos || playlistVideos.length === 0) return;
+    currentTrackIndex = ((index % playlistVideos.length) + playlistVideos.length) % playlistVideos.length;
+    const vid = playlistVideos[currentTrackIndex];
+    if (!vid || !ytPlayer) return;
+    try {
+        if (volumeSlider && ytPlayer.setVolume) ytPlayer.setVolume(parseFloat(volumeSlider.value) * 100);
+        if (bgmPlayPause) bgmPlayPause.classList.remove('hidden');
+        if (autoPlay && ytPlayer.loadVideoById) {
+            ytPlayer.loadVideoById(vid);
+            if (ytPlayer.playVideo) ytPlayer.playVideo();
+            syncPlayIcons(true);
+        } else if (ytPlayer.cueVideoById) {
+            ytPlayer.cueVideoById(vid);
+            syncPlayIcons(false);
+        }
+        setTimeout(syncYouTubeTrackInfo, 300);
+        setTimeout(syncYouTubeTrackInfo, 800);
+    } catch (err) {
+        console.warn("playPlaylistIndex error:", err);
+    }
+}
+
+export function playNextInPlaylist() {
+    if (!isYouTubePlaylistActive || !playlistVideos || playlistVideos.length === 0) {
+        if (ytPlayer && ytPlayer.nextVideo) ytPlayer.nextVideo();
+        return;
+    }
+    if (isShuffle && playlistVideos.length > 1) {
+        let nextIdx = currentTrackIndex;
+        while (nextIdx === currentTrackIndex) {
+            nextIdx = Math.floor(Math.random() * playlistVideos.length);
+        }
+        playPlaylistIndex(nextIdx, true);
+    } else {
+        playPlaylistIndex(currentTrackIndex + 1, true);
+    }
+}
+
+export function playPrevInPlaylist() {
+    if (!isYouTubePlaylistActive || !playlistVideos || playlistVideos.length === 0) {
+        if (ytPlayer && ytPlayer.previousVideo) ytPlayer.previousVideo();
+        return;
+    }
+    playPlaylistIndex(currentTrackIndex - 1, true);
+}
+
 export function loadYouTubePlaylist(playlistId, autoPlay = true) {
     currentBgmMode = 'youtube';
     isYouTubePlaylistActive = true;
     if (audio && !audio.paused) audio.pause();
 
-    const videoList = Array.isArray(cfg.youtubePlaylistVideos) && cfg.youtubePlaylistVideos.length > 0
-        ? [...cfg.youtubePlaylistVideos]
-        : [];
+    const isFreshReady = _playlistSyncState.id === playlistId && _playlistSyncState.synced && playlistVideos.length > 0;
+    if (!isFreshReady && playlistVideos.length === 0 && Array.isArray(cfg.youtubePlaylistVideos) && cfg.youtubePlaylistVideos.length > 0) {
+        playlistVideos = [...cfg.youtubePlaylistVideos];
+        _playlistSyncState.usingFallback = true;
+    }
 
-    const doStart = (list) => {
-        if (!ytPlayer || !ytPlayer.loadPlaylist) {
-            window._pendingPlaylist = { playlistId, autoPlay, list };
-            return;
+    const doStart = () => {
+        if (!ytPlayer || !isYtReady || !ytPlayer.loadVideoById) {
+            window._pendingPlaylist = { playlistId, autoPlay };
+            return false;
         }
-        try {
-            if (volumeSlider) ytPlayer.setVolume(parseFloat(volumeSlider.value) * 100);
-            if (bgmPlayPause) bgmPlayPause.classList.remove('hidden');
-            
-            if (list && list.length > 0) {
-                if (autoPlay) {
-                    ytPlayer.loadPlaylist(list, 0, 0);
-                    if (ytPlayer.setLoop) ytPlayer.setLoop(repeatMode === 'all');
-                    if (ytPlayer.setShuffle && isShuffle) ytPlayer.setShuffle(true);
-                    ytPlayer.playVideo();
-                    syncPlayIcons(true);
-                } else {
-                    if (ytPlayer.cuePlaylist) ytPlayer.cuePlaylist(list, 0, 0);
-                    syncPlayIcons(false);
-                }
-            } else {
-                if (autoPlay) {
-                    ytPlayer.loadPlaylist({
-                        list: playlistId,
-                        listType: 'playlist',
-                        index: 0,
-                        startSeconds: 0
-                    });
-                    if (ytPlayer.setLoop) ytPlayer.setLoop(repeatMode === 'all');
-                    ytPlayer.playVideo();
-                    syncPlayIcons(true);
-                } else {
-                    if (ytPlayer.cuePlaylist) {
-                        ytPlayer.cuePlaylist({
-                            list: playlistId,
-                            listType: 'playlist',
-                            index: 0,
-                            startSeconds: 0
-                        });
-                    }
-                    syncPlayIcons(false);
-                }
-            }
-        } catch (err) {
-            console.warn("YouTube play error:", err);
+        if (playlistVideos.length > 0) {
+            window._pendingPlaylist = null;
+            playPlaylistIndex(0, autoPlay);
+            return true;
         }
+        return false;
     };
 
-    // 1. Immediately start playback synchronously within the user gesture context
-    doStart(videoList);
-
-    // 2. Background fetch fresh playlist videos from server API in parallel
-    fetch(`/api/youtube-playlist?id=${encodeURIComponent(playlistId)}`)
-        .then(res => res.json())
-        .then(json => {
-            if (json.success && Array.isArray(json.list) && json.list.length > 0) {
-                cfg.youtubePlaylistVideos = json.list;
-                if (videoList.length === 0 && (!ytPlayer || !ytPlayer.getPlayerState || ytPlayer.getPlayerState() <= 0)) {
-                    doStart(json.list);
+    // 1. Immediately start playback synchronously within the user gesture context, or poll until ready
+    if (!doStart()) {
+        const check = setInterval(() => {
+            if (ytPlayer && isYtReady && ytPlayer.loadVideoById && playlistVideos.length > 0) {
+                clearInterval(check);
+                if (window._pendingPlaylist) {
+                    window._pendingPlaylist = null;
+                    doStart();
                 }
             }
-        })
-        .catch(() => {});
+        }, 200);
+        setTimeout(() => clearInterval(check), 10000);
+    }
+
+    // 2. Ensure fresh playlist from server API (reuses in-flight prefetch if same ID)
+    if (!isFreshReady) {
+        fetchFreshPlaylist(playlistId).then(freshList => {
+            if (!freshList || freshList.length === 0) return;
+            const currentVid = ytPlayer && ytPlayer.getVideoData ? ytPlayer.getVideoData()?.video_id : '';
+            const wasFallback = _playlistSyncState.usingFallback;
+            _playlistSyncState.usingFallback = false;
+
+            if (!ytPlayer || !ytPlayer.getPlayerState || ytPlayer.getPlayerState() <= 0) {
+                doStart();
+            } else if (wasFallback && (!currentVid || currentVid !== freshList[0])) {
+                // Switch immediately from stale fallback track to fresh playlist's first track
+                playPlaylistIndex(0, autoPlay);
+            }
+        });
+    }
 }
 
 export function initAudio() {
@@ -233,20 +316,6 @@ export function initAudio() {
         if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(parseFloat(savedVol) * 100);
     }
 
-    if (volumeSlider) {
-        volumeSlider.addEventListener('input', () => {
-            const vol = parseFloat(volumeSlider.value);
-            localStorage.setItem('profile_bgm_volume', vol);
-            if (audio) audio.volume = vol;
-            if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(vol * 100);
-            if (bgmMute) bgmMute.className = vol == 0 ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
-            // Tự ẩn popup sau khi chỉnh xong 1.2s
-            if (volumePopup) {
-                clearTimeout(window._volHideTimer);
-                window._volHideTimer = setTimeout(() => volumePopup.classList.add('hidden'), 1200);
-            }
-        });
-    }
     const updateVolumeUI = (vol) => {
         if (volumeSlider) {
             volumeSlider.style.background = `linear-gradient(to right, var(--c-lavender) ${vol * 100}%, rgba(255,255,255,0.15) ${vol * 100}%)`;
@@ -255,12 +324,28 @@ export function initAudio() {
     };
     const volumePopup = document.getElementById('volume-popup');
     const volumeWrapper = document.getElementById('volume-wrapper');
+
+    if (volumeSlider) {
+        volumeSlider.addEventListener('input', () => {
+            const vol = parseFloat(volumeSlider.value);
+            localStorage.setItem('profile_bgm_volume', vol);
+            if (audio) audio.volume = vol;
+            if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(vol * 100);
+            updateVolumeUI(vol);
+            // Tự ẩn popup sau khi chỉnh xong 1.2s
+            if (volumePopup) {
+                clearTimeout(window._volHideTimer);
+                window._volHideTimer = setTimeout(() => volumePopup.classList.add('hidden'), 1200);
+            }
+        });
+        updateVolumeUI(parseFloat(volumeSlider.value));
+    }
     if (bgmMute) {
         let prevVol = parseFloat(volumeSlider?.value || localStorage.getItem('profile_bgm_volume') || 0.5);
-        if (volumeSlider) updateVolumeUI(parseFloat(volumeSlider.value));
         bgmMute.style.cursor = 'pointer';
         // Volume icon: hover shows popup via CSS bridge, click toggles mute and keeps popup visible
-        bgmMute.addEventListener('click', (e) => {
+        const muteTrigger = bgmMute.closest('button') || bgmMute;
+        muteTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
             if (volumePopup) volumePopup.classList.remove('hidden');
             const cur = parseFloat(volumeSlider?.value || 0);
@@ -309,14 +394,6 @@ export function initAudio() {
             volumePopup.addEventListener('mouseenter', () => clearTimeout(window._volLeaveTimer));
         }
     }
-    // Ensure slider background reflects current value on load and on input
-    if (volumeSlider) {
-        const syncVolBG = () => updateVolumeUI(parseFloat(volumeSlider.value));
-        volumeSlider.addEventListener('input', syncVolBG);
-        // Init background
-        syncVolBG();
-    }
-
     // --- Seek / Scrub functionality ---
     if (timelineSlider) {
         let isSeeking = false;
@@ -332,7 +409,7 @@ export function initAudio() {
                 const duration = ytPlayer.getDuration() || 0;
                 const seekTime = (value / 100) * duration;
                 ytPlayer.seekTo(seekTime, true);
-            } else if (currentBgmMode === 'local' && audio) {
+            } else if (currentBgmMode === 'local' && audio && Number.isFinite(audio.duration)) {
                 const seekTime = (value / 100) * audio.duration;
                 audio.currentTime = seekTime;
             }
@@ -353,10 +430,16 @@ export function initAudio() {
             const percent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
             timelineSlider.value = percent;
             updateTimelineVisual(percent);
-            doSeek(percent);
         });
-        timelineSlider.addEventListener('mouseup', () => { isSeeking = false; });
-        timelineSlider.addEventListener('mouseleave', () => { if (isSeeking) isSeeking = false; });
+        const finishSeek = () => {
+            if (isSeeking) {
+                isSeeking = false;
+                doSeek(parseFloat(timelineSlider.value));
+            }
+        };
+        timelineSlider.addEventListener('mouseup', finishSeek);
+        timelineSlider.addEventListener('mouseleave', finishSeek);
+        window.addEventListener('mouseup', () => { if (isSeeking) finishSeek(); });
         timelineSlider.addEventListener('touchstart', () => { isSeeking = true; }, { passive: true });
         timelineSlider.addEventListener('touchmove', (e) => {
             if (!isSeeking) return;
@@ -365,12 +448,15 @@ export function initAudio() {
             const percent = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
             timelineSlider.value = percent;
             updateTimelineVisual(percent);
-            doSeek(percent);
         }, { passive: true });
-        timelineSlider.addEventListener('touchend', () => { isSeeking = false; });
+        timelineSlider.addEventListener('touchend', finishSeek);
+        timelineSlider.addEventListener('touchcancel', () => { isSeeking = false; });
         timelineSlider.addEventListener('input', () => {
             const percent = parseFloat(timelineSlider.value);
             updateTimelineVisual(percent);
+        });
+        timelineSlider.addEventListener('change', () => {
+            const percent = parseFloat(timelineSlider.value);
             doSeek(percent);
         });
     }
@@ -444,7 +530,7 @@ export function initAudio() {
 
     // Fix: playPauseBtn is inside coverBtn -> stopPropagation prevents double toggle
     if (playPauseBtn) playPauseBtn.addEventListener('click', togglePlayPause);
-    if (playPauseMainBtn) playPauseMainBtn.addEventListener('click', togglePlayPause);
+    if (playPauseMainBtn) (playPauseMainBtn.closest('button') || playPauseMainBtn).addEventListener('click', togglePlayPause);
     if (coverBtn) coverBtn.addEventListener('click', togglePlayPause);
 
     // Also handle local audio events to keep icons in sync if user uses browser media controls
@@ -460,10 +546,10 @@ export function initAudio() {
             navigator.mediaSession.setActionHandler('play', () => togglePlayPause());
             navigator.mediaSession.setActionHandler('pause', () => togglePlayPause());
             navigator.mediaSession.setActionHandler('nexttrack', () => {
-                if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.nextVideo) ytPlayer.nextVideo();
+                if (currentBgmMode === 'youtube') playNextInPlaylist();
             });
             navigator.mediaSession.setActionHandler('previoustrack', () => {
-                if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.previousVideo) ytPlayer.previousVideo();
+                if (currentBgmMode === 'youtube') playPrevInPlaylist();
             });
             navigator.mediaSession.setActionHandler('seekto', (details) => {
                 if (details.seekTime != null) {
@@ -476,40 +562,42 @@ export function initAudio() {
 
     const shuffleBtn = document.getElementById('bgm-shuffle');
     if (shuffleBtn) {
-        shuffleBtn.addEventListener('click', (e) => {
+        const shuffleTrigger = shuffleBtn.closest('button') || shuffleBtn;
+        shuffleTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
             isShuffle = !isShuffle;
             if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.setShuffle) {
                 ytPlayer.setShuffle(isShuffle);
             }
             shuffleBtn.classList.toggle('active', isShuffle);
-            shuffleBtn.title = isShuffle ? 'Shuffle: On' : 'Shuffle: Off';
+            shuffleTrigger.title = isShuffle ? 'Shuffle: On' : 'Shuffle: Off';
         });
     }
 
     const repeatBtn = document.getElementById('bgm-repeat');
     if (repeatBtn) {
+        const repeatTrigger = repeatBtn.closest('button') || repeatBtn;
         repeatBtn.classList.add('active'); // Default: repeat all
-        repeatBtn.title = 'Repeat: All';
-        repeatBtn.addEventListener('click', (e) => {
+        repeatTrigger.title = 'Repeat: All';
+        repeatTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
             if (repeatMode === 'all') {
                 repeatMode = 'one';
                 repeatBtn.className = 'fa-solid fa-repeat active';
-                repeatBtn.title = 'Repeat: Single Track';
+                repeatTrigger.title = 'Repeat: Single Track';
                 if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.setLoop) ytPlayer.setLoop(false);
                 if (audio) audio.loop = true;
             } else if (repeatMode === 'one') {
                 repeatMode = 'none';
                 repeatBtn.className = 'fa-solid fa-repeat';
                 repeatBtn.classList.remove('active');
-                repeatBtn.title = 'Repeat: Off';
+                repeatTrigger.title = 'Repeat: Off';
                 if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.setLoop) ytPlayer.setLoop(false);
                 if (audio) audio.loop = false;
             } else {
                 repeatMode = 'all';
                 repeatBtn.className = 'fa-solid fa-repeat active';
-                repeatBtn.title = 'Repeat: All';
+                repeatTrigger.title = 'Repeat: All';
                 if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.setLoop) ytPlayer.setLoop(true);
                 if (audio) audio.loop = false;
             }
@@ -518,24 +606,20 @@ export function initAudio() {
 
     const nextBtn = document.getElementById('bgm-next');
     if (nextBtn) {
-        nextBtn.addEventListener('click', (e) => {
+        (nextBtn.closest('button') || nextBtn).addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.nextVideo) {
-                ytPlayer.nextVideo();
-                setTimeout(syncYouTubeTrackInfo, 300);
-                setTimeout(syncYouTubeTrackInfo, 800);
+            if (currentBgmMode === 'youtube') {
+                playNextInPlaylist();
             }
         });
     }
 
     const prevBtn = document.getElementById('bgm-prev');
     if (prevBtn) {
-        prevBtn.addEventListener('click', (e) => {
+        (prevBtn.closest('button') || prevBtn).addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentBgmMode === 'youtube' && ytPlayer && ytPlayer.previousVideo) {
-                ytPlayer.previousVideo();
-                setTimeout(syncYouTubeTrackInfo, 300);
-                setTimeout(syncYouTubeTrackInfo, 800);
+            if (currentBgmMode === 'youtube') {
+                playPrevInPlaylist();
             }
         });
     }
@@ -582,6 +666,40 @@ export function tickVisualizer() {
     }
 }
 
+function updateYtProgressUI() {
+    if (!ytPlayer || currentBgmMode !== 'youtube' || !timelineSlider || timelineSlider._isSeeking) return;
+    const cur = ytPlayer.getCurrentTime ? (ytPlayer.getCurrentTime() || 0) : 0;
+    const dur = ytPlayer.getDuration ? (ytPlayer.getDuration() || ytDuration || 0) : ytDuration;
+    if (dur && dur !== ytDuration) {
+        ytDuration = dur;
+        if (bgmDuration) bgmDuration.textContent = formatTime(ytDuration);
+    }
+    if (bgmCurrent) bgmCurrent.textContent = formatTime(cur);
+    const percent = ytDuration ? Math.min(100, Math.max(0, (cur / ytDuration) * 100)) : 0;
+    timelineSlider.value = percent;
+    timelineSlider.style.background = `linear-gradient(to right, var(--c-lavender) ${percent}%, rgba(255,255,255,0.1) ${percent}%)`;
+    syncYouTubeTrackInfo();
+}
+
+function startYtProgressLoop() {
+    updateYtProgressUI();
+    if (ytInterval) clearInterval(ytInterval);
+    ytInterval = setInterval(() => {
+        if (currentBgmMode !== 'youtube' || !ytPlayer) return;
+        const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+        if (st === 1 || st === 3) {
+            updateYtProgressUI();
+        }
+    }, 500);
+}
+
+function stopYtProgressLoop() {
+    if (ytInterval) {
+        clearInterval(ytInterval);
+        ytInterval = null;
+    }
+}
+
 // Global hook for YouTube IFrame API
 let _ytApiReadyInit = false;
 window.onYouTubeIframeAPIReady = function() {
@@ -602,21 +720,21 @@ window.onYouTubeIframeAPIReady = function() {
         },
         events: {
             'onReady': (e) => {
+                isYtReady = true;
                 if (volumeSlider) e.target.setVolume(parseFloat(volumeSlider.value) * 100);
                 if (bgmPlayPause) bgmPlayPause.classList.remove('hidden');
                 if (window._pendingPlaylist) {
                     const p = window._pendingPlaylist;
                     window._pendingPlaylist = null;
                     loadYouTubePlaylist(p.playlistId, p.autoPlay);
+                } else if (playlistVideos.length > 0 && e.target.cueVideoById) {
+                    try { e.target.cueVideoById(playlistVideos[0]); } catch {}
                 }
             },
             'onError': (e) => {
                 console.warn('YouTube playback error:', e.data);
-                // Error 100/101/150: automatically skip to next track
-                if (ytPlayer && ytPlayer.nextVideo) {
-                    setTimeout(() => {
-                        if (ytPlayer && ytPlayer.nextVideo) ytPlayer.nextVideo();
-                    }, 500);
+                if (isYouTubePlaylistActive && playlistVideos.length > 1) {
+                    setTimeout(() => playNextInPlaylist(), 500);
                 }
             },
             'onStateChange': (e) => {
@@ -629,61 +747,28 @@ window.onYouTubeIframeAPIReady = function() {
                     ytDuration = ytPlayer.getDuration ? (ytPlayer.getDuration() || 0) : 0;
                     if (bgmDuration) bgmDuration.textContent = formatTime(ytDuration);
                     syncYouTubeTrackInfo();
-                    
-                    if (ytInterval) clearInterval(ytInterval);
-                    ytInterval = setInterval(() => {
-                        if (currentBgmMode === 'youtube' && timelineSlider && !timelineSlider.matches(':active') && !timelineSlider._isSeeking) {
-                            const cur = ytPlayer.getCurrentTime ? (ytPlayer.getCurrentTime() || 0) : 0;
-                            const dur = ytPlayer.getDuration ? (ytPlayer.getDuration() || ytDuration || 0) : ytDuration;
-                            if (dur && dur !== ytDuration) {
-                                ytDuration = dur;
-                                if (bgmDuration) bgmDuration.textContent = formatTime(ytDuration);
-                            }
-                            if (bgmCurrent) bgmCurrent.textContent = formatTime(cur);
-                            const percent = ytDuration ? (cur / ytDuration) * 100 : 0;
-                            timelineSlider.value = percent || 0;
-                            timelineSlider.style.background = `linear-gradient(to right, var(--c-lavender) ${percent}%, rgba(255,255,255,0.1) ${percent}%)`;
-                            
-                            // Continually ensure title/cover is in sync with current track
-                            syncYouTubeTrackInfo();
-                        }
-                    }, 500);
+                    startYtProgressLoop();
                 } else if (e.data === YT.PlayerState.PAUSED) {
                     syncPlayIcons(false);
-                    if (ytInterval) {
-                        clearInterval(ytInterval);
-                        ytInterval = null;
-                    }
+                    stopYtProgressLoop();
                 } else if (e.data === YT.PlayerState.BUFFERING) {
                     syncYouTubeTrackInfo();
                 } else if (e.data === YT.PlayerState.ENDED) {
+                    stopYtProgressLoop();
                     if (repeatMode === 'one') {
                         ytPlayer.seekTo(0, true);
                         ytPlayer.playVideo();
                     } else if (repeatMode === 'all') {
-                        setTimeout(() => {
-                            if (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === YT.PlayerState.ENDED) {
-                                const idx = ytPlayer.getPlaylistIndex ? ytPlayer.getPlaylistIndex() : -1;
-                                const list = ytPlayer.getPlaylist ? ytPlayer.getPlaylist() : [];
-                                if (list && list.length > 0 && idx >= list.length - 1) {
-                                    if (ytPlayer.playVideoAt) ytPlayer.playVideoAt(0);
-                                    else if (ytPlayer.nextVideo) ytPlayer.nextVideo();
-                                } else {
-                                    if (ytPlayer.nextVideo) ytPlayer.nextVideo();
-                                    else if (ytPlayer.playVideoAt) ytPlayer.playVideoAt(0);
-                                }
-                            }
-                        }, 800);
+                        playNextInPlaylist();
                     } else {
-                        const idx = ytPlayer.getPlaylistIndex ? ytPlayer.getPlaylistIndex() : -1;
-                        const list = ytPlayer.getPlaylist ? ytPlayer.getPlaylist() : [];
-                        if (list && idx >= list.length - 1) {
+                        if (isYouTubePlaylistActive && currentTrackIndex < playlistVideos.length - 1) {
+                            playNextInPlaylist();
+                        } else {
                             syncPlayIcons(false);
-                        } else if (ytPlayer.nextVideo) {
-                            ytPlayer.nextVideo();
                         }
                     }
                 } else if (e.data === YT.PlayerState.CUED) {
+                    stopYtProgressLoop();
                     ytDuration = ytPlayer.getDuration ? (ytPlayer.getDuration() || 0) : 0;
                     if (bgmDuration) bgmDuration.textContent = formatTime(ytDuration);
                     syncYouTubeTrackInfo();

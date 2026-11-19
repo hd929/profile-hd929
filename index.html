@@ -27,9 +27,13 @@
     <link rel="apple-touch-icon" href="assets/img/favicon.png?v=2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="assets/css/style.css?v=9.1">
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://cdn.discordapp.com">
+    <link rel="dns-prefetch" href="https://i.ytimg.com">
+    <link rel="stylesheet" href="assets/css/style.css?v=9.5">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>
     <!-- JSON-LD Structured Data -->
     <script type="application/ld+json">
     {
@@ -66,7 +70,7 @@
     <canvas id="mouse-canvas"></canvas>
 
     <!-- Entry Screen -->
-    <div class="entry-screen" id="entry">
+    <div class="entry-screen" id="entry" role="button" tabindex="0" aria-label="Click or press Enter to enter profile">
         <h1 class="entry-title">[ Aji - H ]</h1>
         <p class="entry-prompt"><i class="fa-solid fa-circle-play hidden" id="entry-play-icon"></i> click anywhere to enter</p>
     </div>
@@ -82,9 +86,9 @@
                 <span class="live-pulse-dot"></span>
                 <span id="live-clock">00:00:00</span>
             </div>
-            <div class="theme-dropdown-btn" id="theme-btn" title="Switch Theme Palette">
-                <i class="fa-solid fa-palette"></i>
-            </div>
+            <button type="button" class="theme-dropdown-btn" id="theme-btn" title="Switch Theme Palette" aria-label="Switch Theme Palette">
+                <i class="fa-solid fa-palette" aria-hidden="true"></i>
+            </button>
         </div>
 
         <div class="cards-container single-card-container">
@@ -106,7 +110,10 @@
                     <div class="card-inner">
                         <!-- Top Banner (Mirai Kuriyama Image) -->
                         <div class="card-banner-top">
-                            <img src="assets/img/banner.jpg" alt="Banner" class="banner-img">
+                            <picture>
+                                <source srcset="assets/img/banner.webp" type="image/webp">
+                                <img src="assets/img/banner.jpg" alt="Banner" class="banner-img">
+                            </picture>
                             <div class="banner-overlay"></div>
                         </div>
 
@@ -122,7 +129,7 @@
                             <h1 class="display-name" id="display-name">
                                 <span id="name-text">Aji - H</span>
                                 <span class="clan-tag" id="clan-tag">
-                                    <img id="clan-badge" src="https://cdn.discordapp.com/clan-badges/1494099524745039902/c4f27af524ad1a956d8d99ae1a740dd6.png?size=64" alt="Clan" class="clan-badge">
+                                    <img id="clan-badge" src="https://cdn.discordapp.com/clan-badges/1494099524745039902/66cde1189ceaa09f245177a95dade56c.png?size=64" alt="Clan" class="clan-badge">
                                     <span id="clan-name">Mòe</span>
                                 </span>
                                 <i class="fa-solid fa-circle-check verified-badge" id="verified-badge"></i>
@@ -138,19 +145,8 @@
                             <div class="badges" id="badges-container"></div>
                         </div>
 
-                        <!-- Socials -->
-                        <div class="social-row" id="social-row">
-                            <a href="https://discord.com/users/463983563659018241" target="_blank" class="social-icon discord" title="Discord: aji.h (Click to Copy)" data-copy="aji.h"><i class="fa-brands fa-discord"></i></a>
-                            <a href="https://open.spotify.com/user/31ctsqvgdlb453b3wa6vyzixumdu" target="_blank" class="social-icon spotify" title="Spotify: Hán Đức Duy"><i class="fa-brands fa-spotify"></i></a>
-                            <a href="https://github.com/hd929" target="_blank" class="social-icon github" title="GitHub: hd929"><i class="fa-brands fa-github"></i></a>
-                            <a href="https://steamcommunity.com/profiles/76561198975303427" target="_blank" class="social-icon steam" title="Steam: Ajitana (19 Games)"><i class="fa-brands fa-steam"></i></a>
-                            <a href="https://www.youtube.com/channel/UCfWe8gBRWuHeH6YlFYF82lQ" target="_blank" class="social-icon youtube" title="YouTube: Aji - H"><i class="fa-brands fa-youtube"></i></a>
-                            <a href="https://tracker.gg/valorant/profile/riot/Jab%20Jabich%23Aji/overview" target="_blank" class="social-icon riot" title="Valorant: Jab Jabich#Aji (Click to Copy)" data-copy="Jab Jabich#Aji">
-                                <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" width="22" height="22">
-                                    <path d="M23.792 2.152a.252.252 0 0 0-.098.083c-3.384 4.23-6.769 8.46-10.15 12.69-.107.093-.025.288.119.265 2.439.003 4.877 0 7.316.001a.66.66 0 0 0 .552-.25c.774-.967 1.55-1.934 2.324-2.903a.72.72 0 0 0 .144-.49c-.002-3.077 0-6.153-.003-9.23.016-.11-.1-.206-.204-.167zM.077 2.166c-.077.038-.074.132-.076.205.002 3.074.001 6.15.001 9.225a.679.679 0 0 0 .158.463l7.64 9.55c.12.152.308.25.505.247 2.455 0 4.91.003 7.365 0 .142.02.222-.174.116-.265C10.661 15.176 5.526 8.766.4 2.35c-.08-.094-.174-.272-.322-.184z"/>
-                                </svg>
-                            </a>
-                        </div>
+                        <!-- Socials (populated from config.js) -->
+                        <div class="social-row" id="social-row"></div>
 
                         <!-- Navigation Tabs -->
                         <div class="tab-nav">
@@ -183,6 +179,11 @@
 
                             <!-- MERGED DISCORD LIVE ACTIVITY (BIG & PROMINENT) -->
                             <div class="merged-activity-container" id="activity-card-container">
+                                <!-- Empty State when no Spotify/Game activity -->
+                                <div class="activity-empty hidden" id="activity-empty">
+                                    <i class="fa-regular fa-moon" aria-hidden="true"></i>
+                                    <span>No Spotify / game activity right now</span>
+                                </div>
                                 <!-- Spotify Box -->
                                 <div class="music-box hidden" id="spotify-box">
                                     <div class="music-header" id="sp-header">
@@ -244,71 +245,26 @@
                             </div>
                         </div>
 
-                        <!-- TAB 2: SETUP & GAMES -->
+                        <!-- TAB 2: SETUP & GAMES (populated from config.js) -->
                         <div class="tab-pane" id="tab-setup">
-                            <!-- Discord Games Showcase -->
                             <div class="setup-section">
                                 <h3 class="setup-title"><i class="fa-solid fa-trophy"></i> Favorite Games</h3>
-                                <div class="fav-game-card">
-                                    <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/1245620/library_600x900.jpg" alt="Elden Ring" class="fav-game-cover">
-                                    <div class="fav-game-details">
-                                        <h4 class="fav-game-title">ELDEN RING</h4>
-                                        <span class="game-tag-badge gold"><i class="fa-solid fa-crown"></i> Favorite Game</span>
-                                        <p class="fav-game-desc">GotY • Elden Lord • FromSoftware</p>
-                                    </div>
-                                </div>
+                                <div class="fav-game-card"></div>
                             </div>
 
                             <div class="setup-section">
                                 <h3 class="setup-title"><i class="fa-solid fa-gamepad"></i> Games in Rotation</h3>
-                                <div class="rotation-games-grid">
-                                    <div class="rot-game-card">
-                                        <img src="assets/img/zzz.jpg" alt="Zenless Zone Zero" class="rot-game-img">
-                                        <div class="rot-game-info">
-                                            <p class="rot-game-name">Zenless Zone Zero</p>
-                                            <span class="game-tag-badge">HoYoverse</span>
-                                        </div>
-                                    </div>
-                                    <div class="rot-game-card">
-                                        <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/co2mvt.jpg" alt="VALORANT" class="rot-game-img">
-                                        <div class="rot-game-info">
-                                            <p class="rot-game-name">VALORANT</p>
-                                            <span class="game-tag-badge">Jab Jabich#Aji</span>
-                                        </div>
-                                    </div>
-                                </div>
+                                <div class="rotation-games-grid"></div>
                             </div>
 
                             <div class="setup-section">
                                 <h3 class="setup-title"><i class="fa-solid fa-desktop"></i> Gear & Setup</h3>
-                                <div class="gear-grid" id="gear-grid">
-                                    <div class="gear-item">
-                                        <span class="gear-label"><i class="fa-solid fa-computer-mouse"></i> Mouse</span>
-                                        <span class="gear-value">VXE R1 SE+</span>
-                                    </div>
-                                    <div class="gear-item">
-                                        <span class="gear-label"><i class="fa-solid fa-keyboard"></i> Keyboard</span>
-                                        <span class="gear-value">Dareu EK75 Pro</span>
-                                    </div>
-                                    <div class="gear-item">
-                                        <span class="gear-label"><i class="fa-solid fa-headphones"></i> Audio</span>
-                                        <span class="gear-value">7HZ x Crinacle Zero: 2</span>
-                                    </div>
-                                    <div class="gear-item">
-                                        <span class="gear-label"><i class="fa-solid fa-microchip"></i> Platform</span>
-                                        <span class="gear-value">Windows 10 / 11</span>
-                                    </div>
-                                </div>
+                                <div class="gear-grid" id="gear-grid"></div>
                             </div>
 
                             <div class="setup-section">
                                 <h3 class="setup-title"><i class="fa-solid fa-heart"></i> Favorites</h3>
-                                <div class="tags-container" id="favorites-container">
-                                    <span class="tag-badge"><i class="fa-solid fa-gamepad"></i> FPS / Tactical Shooter</span>
-                                    <span class="tag-badge"><i class="fa-solid fa-music"></i> Pop / Lofi / J-Pop</span>
-                                    <span class="tag-badge"><i class="fa-solid fa-book-open"></i> Anime / Manga / ACGN</span>
-                                    <span class="tag-badge"><i class="fa-solid fa-code"></i> Coding & AI Engineering</span>
-                                </div>
+                                <div class="tags-container" id="favorites-container"></div>
                             </div>
                         </div>
 
@@ -316,13 +272,14 @@
                         <div class="tab-pane" id="tab-message">
                             <div class="message-box-container">
                                 <p class="message-desc"><i class="fa-solid fa-envelope-open-text"></i> Leave an anonymous note or message!</p>
-                                <form id="anonymous-form" class="anon-form">
+                                <form id="anonymous-form" class="anon-form" novalidate>
                                     <div class="form-group">
-                                        <input type="text" id="anon-name" placeholder="Your Name or Tag (Optional)" maxlength="30" class="anon-input">
+                                        <input type="text" id="anon-name" placeholder="Your Name or Tag (Optional)" maxlength="30" class="anon-input" aria-label="Your Name or Tag (Optional)">
                                     </div>
                                     <div class="form-group">
-                                        <textarea id="anon-msg" placeholder="Type your message here..." required maxlength="300" rows="4" class="anon-textarea"></textarea>
+                                        <textarea id="anon-msg" placeholder="Type your message here..." required maxlength="300" rows="4" class="anon-textarea" aria-label="Your message"></textarea>
                                     </div>
+                                    <p id="anon-error" class="anon-error hidden" role="alert"></p>
                                     <button type="submit" id="anon-submit-btn" class="anon-submit-btn">
                                         <i class="fa-solid fa-paper-plane"></i> Send Message
                                     </button>
@@ -350,7 +307,7 @@
                         <i class="fa-solid fa-pause hidden" id="bgm-play-pause"></i>
                     </div>
                 </div>
-                <div id="yt-player-container" style="position:fixed; bottom:0; right:0; width:1px; height:1px; opacity:0.01; pointer-events:none; z-index:-999;"></div>
+                <div id="yt-player-container" style="position:fixed; bottom:-200px; right:-200px; width:200px; height:200px; opacity:0.001; pointer-events:none; z-index:-999;"></div>
                 <div class="bgm-info">
                     <div class="bgm-title-row">
                         <div class="marquee-container">
@@ -359,21 +316,21 @@
                     </div>
                     <div class="bgm-timeline">
                         <span class="bgm-time" id="bgm-current">0:00</span>
-                        <input type="range" id="bgm-progress-slider" min="0" max="100" step="0.1" value="0" class="timeline-slider">
+                        <input type="range" id="bgm-progress-slider" min="0" max="100" step="0.1" value="0" class="timeline-slider" aria-label="Seek music progress">
                         <span class="bgm-time" id="bgm-duration">0:00</span>
                     </div>
                     <div class="bgm-controls">
                         <div class="bgm-main-controls">
-                            <i class="fa-solid fa-shuffle" id="bgm-shuffle" title="Shuffle: Off"></i>
-                            <i class="fa-solid fa-backward-step" id="bgm-prev" title="Previous Song"></i>
-                            <i class="fa-solid fa-circle-pause" id="bgm-play-pause-main" title="Play/Pause" style="font-size:1.35rem; color: var(--accent-primary);"></i>
-                            <i class="fa-solid fa-forward-step" id="bgm-next" title="Next Song"></i>
-                            <i class="fa-solid fa-repeat" id="bgm-repeat" title="Repeat: All"></i>
+                            <button type="button" class="bgm-icon-btn" aria-label="Toggle Shuffle" title="Shuffle: Off"><i class="fa-solid fa-shuffle" id="bgm-shuffle" aria-hidden="true"></i></button>
+                            <button type="button" class="bgm-icon-btn" aria-label="Previous Song" title="Previous Song"><i class="fa-solid fa-backward-step" id="bgm-prev" aria-hidden="true"></i></button>
+                            <button type="button" class="bgm-icon-btn" aria-label="Play or Pause" title="Play/Pause"><i class="fa-solid fa-circle-pause" id="bgm-play-pause-main" style="font-size:1.35rem; color: var(--accent-primary);" aria-hidden="true"></i></button>
+                            <button type="button" class="bgm-icon-btn" aria-label="Next Song" title="Next Song"><i class="fa-solid fa-forward-step" id="bgm-next" aria-hidden="true"></i></button>
+                            <button type="button" class="bgm-icon-btn" aria-label="Toggle Repeat" title="Repeat: All"><i class="fa-solid fa-repeat" id="bgm-repeat" aria-hidden="true"></i></button>
                         </div>
                         <div class="volume-popup-wrapper" id="volume-wrapper">
-                            <i class="fa-solid fa-volume-high" id="bgm-mute" title="Mute"></i>
+                            <button type="button" class="bgm-icon-btn" aria-label="Toggle Mute" title="Mute"><i class="fa-solid fa-volume-high" id="bgm-mute" aria-hidden="true"></i></button>
                             <div class="volume-popup hidden" id="volume-popup">
-                                <input type="range" id="bgm-volume" min="0" max="1" step="0.01" value="0.5" class="volume-slider">
+                                <input type="range" id="bgm-volume" min="0" max="1" step="0.01" value="0.5" class="volume-slider" aria-label="Volume">
                             </div>
                         </div>
                     </div>
@@ -384,10 +341,10 @@
     </main>
 
     <!-- Toast Notification -->
-    <div id="toast" class="toast"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <!-- Main Scripts -->
-    <script src="assets/js/config.js?v=9.1"></script>
-    <script type="module" src="assets/js/script.js?v=9.1"></script>
+    <script src="assets/js/config.js?v=9.4"></script>
+    <script type="module" src="assets/js/script.js?v=9.7"></script>
 </body>
 </html>

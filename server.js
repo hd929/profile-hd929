@@ -2,6 +2,8 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const zlib = require('zlib');
 
 // Load .env locally (simple parser, no dep) - production uses /etc/profile-web.env via systemd
 (function loadEnv() {
@@ -26,6 +28,30 @@ const path = require('path');
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 const secHeaders = { 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' };
+
+// Compressible content types for gzip
+const COMPRESSIBLE_EXT = new Set(['.html', '.css', '.js', '.json', '.svg', '.txt', '.xml']);
+function acceptsGzip(req) {
+  const ae = (req.headers['accept-encoding'] || '').toLowerCase();
+  return ae.includes('gzip');
+}
+function gzipBuffer(buf) {
+  return zlib.gzipSync(buf, { level: 6 });
+}
+function sendJson(req, res, status, obj, extra = {}) {
+  const body = JSON.stringify(obj);
+  const headers = { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8', ...extra };
+  if (acceptsGzip(req)) {
+    const gz = gzipBuffer(Buffer.from(body));
+    headers['Content-Encoding'] = 'gzip';
+    headers['Vary'] = 'Accept-Encoding';
+    res.writeHead(status, { ...headers, 'Content-Length': gz.length });
+    res.end(gz);
+  } else {
+    res.writeHead(status, { ...headers, 'Content-Length': Buffer.byteLength(body) });
+    res.end(body);
+  }
+}
 
 const mime = {
   '.html': 'text/html; charset=utf-8',
@@ -59,39 +85,59 @@ setInterval(() => {
 const viewsFile = path.join(__dirname, 'views.json');
 const viewedIpsFile = path.join(__dirname, 'viewed_ips.json');
 const VIEW_DEDUP_MS = 24 * 60 * 60 * 1000; // 24h per IP
-function readViews() {
-  try { const d = JSON.parse(fs.readFileSync(viewsFile, 'utf8')); return Number(d.count) || 0; } catch { return 0; }
+// State lives in RAM; disk is only a periodic snapshot (no sync I/O per request).
+// IPs are stored as salted hashes, never in plaintext.
+const VIEW_SALT = process.env.VIEW_SALT || 'profile-views-salt';
+const hashIp = (ip) => crypto.createHash('sha256').update(VIEW_SALT + ip).digest('hex').slice(0, 16);
+
+function loadJson(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
 }
-function writeViews(count) {
-  try { fs.writeFileSync(viewsFile, JSON.stringify({ count }, null, 2)); } catch(e) { console.error('[Views] write error', e); }
+let viewCount = Number(loadJson(viewsFile, {}).count) || 0;
+const viewedIps = new Map();
+for (const [k, ts] of Object.entries(loadJson(viewedIpsFile, {}))) {
+  // Drop legacy plaintext-IP entries and expired ones
+  if (/^[0-9a-f]{16}$/.test(k) && Date.now() - ts < VIEW_DEDUP_MS) viewedIps.set(k, ts);
 }
-function readViewedIps() {
-  try { return JSON.parse(fs.readFileSync(viewedIpsFile, 'utf8')); } catch { return {}; }
+let viewsDirty = false;
+
+function atomicWrite(file, data) {
+  const tmp = file + '.tmp';
+  return fs.promises.writeFile(tmp, data).then(() => fs.promises.rename(tmp, file));
 }
-function writeViewedIps(map) {
-  try { fs.writeFileSync(viewedIpsFile, JSON.stringify(map, null, 2)); } catch(e) {}
-}
-function hasViewedRecently(ip) {
-  const map = readViewedIps();
-  const ts = map[ip];
-  if (!ts) return false;
-  if (Date.now() - ts > VIEW_DEDUP_MS) {
-    delete map[ip];
-    writeViewedIps(map);
-    return false;
+function flushViews(sync = false) {
+  if (!viewsDirty) return;
+  viewsDirty = false;
+  const now = Date.now();
+  for (const [k, ts] of viewedIps) if (now - ts > VIEW_DEDUP_MS) viewedIps.delete(k);
+  const a = JSON.stringify({ count: viewCount });
+  const b = JSON.stringify(Object.fromEntries(viewedIps));
+  if (sync) {
+    try { fs.writeFileSync(viewsFile, a); fs.writeFileSync(viewedIpsFile, b); } catch (e) { console.error('[Views] flush error', e); }
+    return;
   }
-  return true;
+  Promise.all([atomicWrite(viewsFile, a), atomicWrite(viewedIpsFile, b)])
+    .catch(e => { viewsDirty = true; console.error('[Views] flush error', e); });
+}
+setInterval(flushViews, 10000).unref();
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { flushViews(true); process.exit(0); });
+
+function readViews() { return viewCount; }
+function hasViewedRecently(ip) {
+  const ts = viewedIps.get(hashIp(ip));
+  return !!ts && Date.now() - ts <= VIEW_DEDUP_MS;
 }
 function markViewed(ip) {
-  const map = readViewedIps();
-  map[ip] = Date.now();
-  // Cleanup old entries (>24h)
-  for (const k in map) if (Date.now() - map[k] > VIEW_DEDUP_MS) delete map[k];
-  writeViewedIps(map);
+  viewCount += 1;
+  viewedIps.set(hashIp(ip), Date.now());
+  viewsDirty = true;
 }
-// Ensure files exist
-if (!fs.existsSync(viewsFile)) writeViews(0);
-if (!fs.existsSync(viewedIpsFile)) writeViewedIps({});
+function resetViews() {
+  viewCount = 0;
+  viewedIps.clear();
+  viewsDirty = true;
+  flushViews();
+}
 
 function sendDiscordWebhook(name, message, clientIp) {
   return new Promise((resolve, reject) => {
@@ -146,11 +192,11 @@ function sendDiscordWebhook(name, message, clientIp) {
   });
 }
 
-// YouTube Playlist Video IDs Fetcher (cached for 30m)
+// YouTube Playlist Video IDs Fetcher (cached for 60s)
 const ytPlaylistCache = new Map();
 function fetchPlaylistVideos(playlistId) {
   const cached = ytPlaylistCache.get(playlistId);
-  if (cached && (Date.now() - cached.ts < 30 * 60 * 1000)) {
+  if (cached && (Date.now() - cached.ts < 60 * 1000)) {
     return Promise.resolve(cached.videos);
   }
   return new Promise((resolve) => {
@@ -208,9 +254,10 @@ function getClientIp(req) {
 }
 
 const server = http.createServer((req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  let parsedUrl;
   let reqPath;
   try {
+    parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     reqPath = decodeURIComponent(parsedUrl.pathname);
   } catch (e) {
     res.writeHead(400, { ...secHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
@@ -226,22 +273,38 @@ const server = http.createServer((req, res) => {
     // Anti-spam check
     if (ipRateLimits.has(clientIp) && (now - ipRateLimits.get(clientIp) < 20000)) {
       const waitTime = Math.ceil((20000 - (now - ipRateLimits.get(clientIp))) / 1000);
-      res.writeHead(429, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ success: false, error: `You are sending messages too fast! Please wait ${waitTime}s before sending again.` }));
+      sendJson(req, res, 429, { success: false, error: `You are sending messages too fast! Please wait ${waitTime}s before sending again.` });
       return;
     }
 
-    let body = '';
+    const chunks = [];
+    let totalBytes = 0;
+    let tooLarge = false;
     req.on('data', chunk => {
-      body += chunk;
-      if (body.length > 10240) { // Limit to 10KB
-        req.socket.destroy();
+      if (tooLarge) return;
+      totalBytes += chunk.length;
+      if (totalBytes > 10240) { // Limit to 10KB
+        tooLarge = true;
+        sendJson(req, res, 413, { success: false, error: 'Message payload too large (max 10KB).' }, { 'Connection': 'close' });
+        req.resume();
+        res.on('finish', () => { try { req.destroy(); } catch {} });
+        return;
       }
+      chunks.push(chunk);
     });
 
     req.on('end', async () => {
+      if (tooLarge || res.writableEnded) return;
+      let data;
       try {
-        const data = JSON.parse(body || '{}');
+        const body = Buffer.concat(chunks).toString('utf8');
+        data = JSON.parse(body || '{}');
+      } catch {
+        sendJson(req, res, 400, { success: false, error: 'Invalid JSON payload.' });
+        return;
+      }
+
+      try {
         let name = (data.name || 'Anonymous').toString().trim().slice(0, 50);
         let msg = (data.msg || '').toString().trim().slice(0, 1000);
         // Sanitize to prevent Discord @everyone/@here pings and code-block breakout
@@ -250,20 +313,17 @@ const server = http.createServer((req, res) => {
         msg = sanitize(msg);
 
         if (!msg) {
-          res.writeHead(400, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ success: false, error: 'Message cannot be empty!' }));
+          sendJson(req, res, 400, { success: false, error: 'Message cannot be empty!' });
           return;
         }
 
-        ipRateLimits.set(clientIp, now);
         await sendDiscordWebhook(name, msg, clientIp);
+        ipRateLimits.set(clientIp, now);
 
-        res.writeHead(200, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ success: true, message: 'Your message has been sent to Aji!' }));
+        sendJson(req, res, 200, { success: true, message: 'Your message has been sent to Aji!' });
       } catch (err) {
         console.error('[Webhook Error]', err);
-        res.writeHead(500, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ success: false, error: 'Unable to send message at this time. Please try again later!' }));
+        sendJson(req, res, 500, { success: false, error: 'Unable to send message at this time. Please try again later!' });
       }
     });
     return;
@@ -272,40 +332,38 @@ const server = http.createServer((req, res) => {
   // View Counter API (local, replaces counterapi.dev)
   if (reqPath === '/api/views' && req.method === 'GET') {
     const count = readViews();
-    res.writeHead(200, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ count }));
+    sendJson(req, res, 200, { count }, { 'Access-Control-Allow-Origin': '*' });
     return;
   }
-  if (reqPath === '/api/views/up' && (req.method === 'GET' || req.method === 'POST')) {
+  if (reqPath === '/api/views/up' && req.method === 'POST') {
     const clientIp = getClientIp(req);
     let count = readViews();
     if (hasViewedRecently(clientIp)) {
       // Deduped: return current count without increment
-      res.writeHead(200, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
-      res.end(JSON.stringify({ count, deduped: true }));
+      sendJson(req, res, 200, { count, deduped: true }, { 'Access-Control-Allow-Origin': '*' });
       return;
     }
-    count += 1;
-    writeViews(count);
+    count += 1; // markViewed() below performs the real increment (in RAM)
+    // count is persisted by the periodic flush
     markViewed(clientIp);
-    res.writeHead(200, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ count }));
+    sendJson(req, res, 200, { count }, { 'Access-Control-Allow-Origin': '*' });
     return;
   }
 
   if (reqPath === '/api/views/reset' && req.method === 'POST') {
-    const token = req.headers['x-reset-token'] || new URL(req.url, 'http://localhost').searchParams.get('token');
-    if (!process.env.RESET_TOKEN || token !== process.env.RESET_TOKEN) {
-      res.writeHead(403, { ...secHeaders, 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+    const expectedToken = process.env.RESET_TOKEN || process.env.VIEWS_RESET_TOKEN || '';
+    const token = (req.headers['x-reset-token'] || '').toString();
+    const tb = Buffer.from(token), eb = Buffer.from(expectedToken);
+    const tokenOk = !!expectedToken && tb.length === eb.length && crypto.timingSafeEqual(tb, eb);
+    if (!tokenOk) {
+      sendJson(req, res, 403, { success: false, error: 'Unauthorized' });
       return;
     }
     // Simple protection: require header x-reset-token if env set, otherwise allow (log IP)
-    writeViews(0);
-    writeViewedIps({});
+    resetViews();
+    // (cleared in resetViews)
     console.log(`[Views] reset to 0 by ${req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress}`);
-    res.writeHead(200, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
-    res.end(JSON.stringify({ success: true, count: 0 }));
+    sendJson(req, res, 200, { success: true, count: 0 }, { 'Access-Control-Allow-Origin': '*', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
     return;
   }
 
@@ -313,24 +371,21 @@ const server = http.createServer((req, res) => {
   if (reqPath === '/api/youtube-playlist' && req.method === 'GET') {
     const playlistId = parsedUrl.searchParams.get('id') || 'PLsDvPWj1sLN61RtOJQyXQowMt7rAo4nYd';
     if (!/^[a-zA-Z0-9_-]+$/.test(playlistId)) {
-      res.writeHead(400, { ...secHeaders, 'Content-Type': 'application/json', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
-      return res.end(JSON.stringify({ success: false, error: 'Invalid playlist id' }));
+      return sendJson(req, res, 400, { success: false, error: 'Invalid playlist id' }, { 'Referrer-Policy': 'strict-origin-when-cross-origin' });
     }
     fetchPlaylistVideos(playlistId)
       .then(videos => {
-        res.writeHead(200, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8',
+        sendJson(req, res, 200, { success: videos.length > 0, list: videos }, {
           'Access-Control-Allow-Origin': '*',
           'Referrer-Policy': 'strict-origin-when-cross-origin',
-          'Cache-Control': 'public, max-age=1800'
+          'Cache-Control': 'no-cache, must-revalidate'
         });
-        res.end(JSON.stringify({ success: videos.length > 0, list: videos }));
       })
       .catch(() => {
-        res.writeHead(200, { ...secHeaders, 'Content-Type': 'application/json; charset=utf-8',
+        sendJson(req, res, 200, { success: false, list: [] }, {
           'Access-Control-Allow-Origin': '*',
           'Referrer-Policy': 'strict-origin-when-cross-origin'
         });
-        res.end(JSON.stringify({ success: false, list: [] }));
       });
     return;
   }
@@ -342,7 +397,7 @@ const server = http.createServer((req, res) => {
   const allowedPrefixes = ['/assets/', '/favicon.ico', '/index.html'];
   const lowerPath = reqPath.toLowerCase();
   
-  if (lowerPath.includes('..') || lowerPath.includes('\0') || !allowedPrefixes.some(p => lowerPath === p || lowerPath.startsWith(p))) {
+  if (lowerPath.includes('..') || lowerPath.includes('\0') || !allowedPrefixes.some(p => p.endsWith('/') ? lowerPath.startsWith(p) : lowerPath === p)) {
     res.writeHead(403, { ...secHeaders, 'Content-Type': 'text/plain' });
     res.end('Forbidden');
     return;
@@ -350,7 +405,7 @@ const server = http.createServer((req, res) => {
   const filePath = path.join(__dirname, reqPath);
 
   // Security: prevent path traversal
-  if (!filePath.startsWith(__dirname)) {
+  if (!filePath.startsWith(__dirname + path.sep)) {
     res.writeHead(403, { ...secHeaders, 'Content-Type': 'text/plain' });
     res.end('Forbidden');
     return;
@@ -366,6 +421,19 @@ const server = http.createServer((req, res) => {
     const ext = path.extname(filePath).toLowerCase();
     const contentType = mime[ext] || 'application/octet-stream';
     const range = req.headers.range;
+    const etag = `W/"${stats.size}-${Math.floor(stats.mtimeMs)}"`;
+    const cacheControl = ['.html', '.js'].includes(ext) ? 'no-cache, must-revalidate' : 'public, max-age=2592000';
+    const useGzip = !range && acceptsGzip(req) && (COMPRESSIBLE_EXT.has(ext) || contentType.startsWith('text/') || contentType.includes('json'));
+
+    if (!range && req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ...secHeaders,
+        'ETag': etag,
+        'Cache-Control': cacheControl,
+        'Vary': 'Accept-Encoding'
+      });
+      res.end();
+      return;
+    }
 
     // Handle range request for audio/video media
     if (range) {
@@ -390,20 +458,43 @@ const server = http.createServer((req, res) => {
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
         'Content-Type': contentType,
+        'ETag': etag,
         'Access-Control-Allow-Origin': '*',
         'Referrer-Policy': 'strict-origin-when-cross-origin'
       });
       fileStream.on('error', () => { try { res.end(); } catch {} });
+      res.on('close', () => fileStream.destroy());
       fileStream.pipe(res);
+    } else if (useGzip) {
+      res.writeHead(200, { ...secHeaders,
+        'Content-Type': contentType,
+        'Content-Encoding': 'gzip',
+        'Vary': 'Accept-Encoding',
+        'ETag': etag,
+        'Access-Control-Allow-Origin': '*',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Cache-Control': cacheControl
+      });
+      const gz = zlib.createGzip({ level: 6 });
+      const src = fs.createReadStream(filePath);
+      const cleanup = () => { src.destroy(); gz.destroy(); };
+      src.on('error', () => { cleanup(); try { res.end(); } catch {} });
+      gz.on('error', () => { cleanup(); try { res.end(); } catch {} });
+      res.on('close', cleanup);
+      src.pipe(gz).pipe(res);
     } else {
       res.writeHead(200, { ...secHeaders, 'Content-Length': stats.size,
         'Content-Type': contentType,
         'Accept-Ranges': 'bytes',
+        'ETag': etag,
         'Access-Control-Allow-Origin': '*',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
-        'Cache-Control': 'public, max-age=86400'
+        'Cache-Control': cacheControl
       });
-      fs.createReadStream(filePath).pipe(res);
+      const src = fs.createReadStream(filePath);
+      src.on('error', () => { try { res.end(); } catch {} });
+      res.on('close', () => src.destroy());
+      src.pipe(res);
     }
   });
 });

@@ -65,7 +65,7 @@ export function applyConfig() {
         socialRow.innerHTML = cfg.socials.map(s => {
             const iconHtml = s.iconSvg ? s.iconSvg : `<i class="${s.icon}"></i>`;
             const copyAttr = s.copyText ? `data-copy="${s.copyText}"` : '';
-            return `<a href="${s.link}" target="_blank" class="social-icon ${s.type}" title="${s.title || s.name || ''}" ${copyAttr}>${iconHtml}</a>`;
+            return `<a href="${s.link}" target="_blank" rel="noopener noreferrer" class="social-icon ${s.type}" title="${s.title || s.name || ''}" ${copyAttr}>${iconHtml}</a>`;
         }).join('');
         attachCopyListeners();
     }

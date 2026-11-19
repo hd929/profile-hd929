@@ -2,7 +2,7 @@
 // EFFECTS MODULE: Cursor, Particles, Sparkles, Text Scramble
 // ==========================================
 
-import { cfg } from './core.js';
+import { cfg } from './core.js?v=9.3';
 
 // --- Custom Cursor ---
 const cursorDot = document.getElementById('cursor-dot');
@@ -220,7 +220,7 @@ class Sparkle {
 }
 
 export function createSparkles(x, y) {
-    if (!x || !y) return;
+    if (isMobile || x == null || y == null) return;
     const count = isTouch ? 8 : 16;
     for (let i = 0; i < count; i++) {
         sparkleArray.push(new Sparkle(x, y));
@@ -236,15 +236,17 @@ export function playDiscordNameIntro() {
     nameEl.textContent = final;
 }
 
-// Global click/tap sparkles
-window.addEventListener('click', (e) => {
-    createSparkles(e.clientX, e.clientY);
-});
-window.addEventListener('touchstart', (e) => {
-    if (e.touches && e.touches[0]) {
-        createSparkles(e.touches[0].clientX, e.touches[0].clientY);
-    }
-}, { passive: true });
+// Global click/tap sparkles (desktop only — canvas is hidden on mobile)
+if (!isMobile) {
+    window.addEventListener('click', (e) => {
+        createSparkles(e.clientX, e.clientY);
+    });
+    window.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches[0]) {
+            createSparkles(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    }, { passive: true });
+}
 
 export function tickSparkles() {
     if (!ctx) return;

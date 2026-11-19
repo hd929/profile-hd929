@@ -276,7 +276,7 @@ html.is-touch #cursor-dot, html.is-touch #cursor-ring { display: none !important
     align-items: center;
     gap: 8px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    transition: all 0.25s ease;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 .top-badge:hover {
     border-color: var(--accent-primary);
@@ -304,7 +304,7 @@ html.is-touch #cursor-dot, html.is-touch #cursor-ring { display: none !important
     color: var(--text-main);
     font-size: 0.85rem;
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition: color 0.25s ease, border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
 }
 .theme-dropdown-btn:hover {
@@ -361,6 +361,7 @@ body.has-custom-cursor .entry-screen { cursor: none; }
     position: absolute; inset: 0; z-index: 10;
     display: flex; flex-direction: column;
     overflow-y: auto; overflow-x: hidden;
+    scroll-padding-top: 64px;
     padding-bottom: 160px;
     opacity: 1; transition: opacity 0.8s ease;
 }
@@ -937,7 +938,7 @@ body.has-custom-cursor .entry-screen { cursor: none; }
     border-radius: 12px;
     padding: 10px 12px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    transition: all 0.25s ease;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 .fav-game-card:hover {
     border-color: rgba(255, 215, 0, 0.6);
@@ -1033,13 +1034,14 @@ body.has-custom-cursor .entry-screen { cursor: none; }
     gap: 8px;
 }
 .gear-item {
+    min-width: 0;
     background: rgba(255, 255, 255, 0.035);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 10px;
     padding: 8px 12px;
     display: flex;
     flex-direction: column;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 .gear-item:hover {
     background: rgba(255, 255, 255, 0.07);
@@ -1391,15 +1393,30 @@ body.has-custom-cursor .entry-screen { cursor: none; }
 .bgm-title-row { display: flex; align-items: center; width: 100%; min-width: 0; }
 .marquee-container {
     flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; position: relative;
-    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+}
+.marquee-container.is-scrolling {
+    mask-image: linear-gradient(to right, transparent, black 3%, black 97%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 3%, black 97%, transparent);
 }
 .bgm-title {
     font-size: 0.88rem; font-weight: 700; color: #fff;
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-title.scrolling {
+    display: inline-flex;
+    width: max-content;
+    max-width: none;
+    overflow: visible;
+    animation: marqueeScroll 14s linear infinite;
+}
+.marquee-copy {
     display: inline-block;
     white-space: nowrap;
-    padding-left: 0;
-    animation: marqueeScroll 12s linear infinite;
+    padding-right: 36px;
 }
 @keyframes marqueeScroll {
     0% { transform: translateX(0); }
@@ -1445,8 +1462,21 @@ body.has-custom-cursor .entry-screen { cursor: none; }
     width: 90px;
     margin: 0;
 }
+.bgm-icon-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 4px;
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    line-height: 1;
+}
 .bgm-controls i {
-    font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease;
+    font-size: 0.9rem; cursor: pointer; transition: color 0.2s ease, transform 0.2s ease, text-shadow 0.2s ease;
 }
 .bgm-controls i:hover { color: var(--accent-primary); transform: scale(1.15); }
 .bgm-controls i.active {
@@ -1483,7 +1513,7 @@ body.has-custom-cursor .entry-screen { cursor: none; }
     width: 0; height: 0;
     background: var(--accent-primary);
     border-radius: 50%;
-    transition: all 0.15s ease;
+    transition: width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
 }
 .timeline-slider:hover::-webkit-slider-thumb {
     width: 12px; height: 12px;
@@ -1505,23 +1535,24 @@ body.has-custom-cursor .entry-screen { cursor: none; }
 ========================================= */
 .toast {
     position: fixed;
-    bottom: 95px; left: 50%;
-    transform: translateX(-50%) translateY(20px);
-    background: rgba(26, 26, 44, 0.9);
+    top: 20px; left: 50%;
+    transform: translateX(-50%) translateY(-16px);
+    background: rgba(26, 26, 44, 0.94);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--accent-primary);
     color: var(--text-main);
-    padding: 12px 24px;
-    border-radius: 16px;
-    font-size: 0.88rem;
+    padding: 10px 20px;
+    border-radius: 14px;
+    font-size: 0.86rem;
     font-weight: 600;
     box-shadow: 0 12px 35px rgba(0,0,0,0.7), 0 0 25px var(--accent-glow);
     opacity: 0;
     pointer-events: none;
-    transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: opacity 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     z-index: 100000;
     display: flex; align-items: center; gap: 10px;
+    max-width: calc(100vw - 32px);
 }
 .toast.show {
     opacity: 1; transform: translateX(-50%) translateY(0);
@@ -1914,5 +1945,73 @@ body.has-custom-cursor .entry-screen { cursor: none; }
     /* Better tap feedback */
     button:active, .social-icon:active, .tab-btn:active, .gear-item:active, .rot-game-card:active {
         transition: transform 0.1s ease;
+    }
+}
+
+/* =========================================
+   ACCESSIBILITY: FOCUS-VISIBLE & REDUCED MOTION
+   ========================================= */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bgm-spin,
+    .bgm-title.scrolling,
+    .live-pulse-dot,
+    .ambient-glow-1,
+    .ambient-glow-2,
+    .card-border.rainbow-rave {
+        animation: none !important;
+    }
+    .card-tilt {
+        transition: none !important;
+    }
+}
+
+/* Activity empty state & Guestbook inline error */
+.activity-empty {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px dashed var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.activity-empty.hidden { display: none; }
+
+.anon-error {
+    color: #f38ba8;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin: 0;
+    text-align: left;
+}
+.anon-error.hidden { display: none; }
+
+/* Compact vertical spacing on 720p-768p laptops so card + BGM fit cleanly */
+@media (max-height: 820px) and (min-width: 769px) {
+    .main-content {
+        padding-bottom: 40px;
+    }
+    .cards-container {
+        padding: 44px 16px 48px 16px;
+    }
+    .card-banner-top {
+        height: 110px;
+    }
+    .card-inner {
+        gap: 10px;
+        padding: 0 22px 18px 22px;
     }
 }

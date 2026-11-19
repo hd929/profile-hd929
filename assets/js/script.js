@@ -2,30 +2,38 @@
 // MAIN ENTRY POINT: Orchestrates all modules
 // ==========================================
 
-import { cfg, applyConfig, initLiveClock, initThemeSwitcher } from './modules/core.js';
-import { initCursor, tickCursor, initCanvas, tickSakura, createSparkles, tickSparkles, initTextScramble, isMobile, isTouch, playDiscordNameIntro } from './modules/effects.js';
-import { initCardTilt, resetTilt, initTabs, initEasterEggs } from './modules/card.js';
-import { initAudio, loadYouTubePlaylist, loadYouTubeAPI, tickVisualizer, bgmPlayer, initAudioContext } from './modules/audio.js';
-import { initLanyard } from './modules/lanyard.js';
-import { initMessageForm } from './modules/message.js';
+import { cfg, applyConfig, initLiveClock, initThemeSwitcher } from './modules/core.js?v=9.3';
+import { initCursor, tickCursor, initCanvas, tickSakura, createSparkles, tickSparkles, initTextScramble, isMobile, isTouch, playDiscordNameIntro } from './modules/effects.js?v=9.3';
+import { initCardTilt, resetTilt, initTabs, initEasterEggs } from './modules/card.js?v=9.3';
+import { initAudio, loadYouTubePlaylist, loadYouTubeAPI, tickVisualizer, bgmPlayer, initAudioContext } from './modules/audio.js?v=9.7';
+import { initLanyard } from './modules/lanyard.js?v=9.7';
+import { initMessageForm } from './modules/message.js?v=9.3';
 
 // --- Entry Screen Handler ---
 const entryScreen = document.getElementById('entry');
 const mainContent = document.getElementById('main');
 
 if (entryScreen) {
-    entryScreen.addEventListener('click', (e) => {
+    const enterSite = (x, y) => {
+        if (entryScreen.classList.contains('hidden')) return;
         entryScreen.classList.add('hidden');
         if (mainContent) mainContent.classList.remove('hidden');
         if (bgmPlayer) bgmPlayer.classList.add('visible', 'playing');
-        createSparkles(e.clientX, e.clientY);
-        
+        createSparkles(x, y);
+
         initAudioContext();
         playDiscordNameIntro();
-        
+
         const ytListId = cfg.youtubePlaylistId || 'PLsDvPWj1sLN61RtOJQyXQowMt7rAo4nYd';
         if (ytListId) {
             loadYouTubePlaylist(ytListId, true);
+        }
+    };
+    entryScreen.addEventListener('click', (e) => enterSite(e.clientX, e.clientY));
+    entryScreen.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            enterSite(window.innerWidth / 2, window.innerHeight / 2);
         }
     });
 }
@@ -34,29 +42,19 @@ if (entryScreen) {
 let animationFrameId = null;
 let isLoopRunning = false;
 
-let lastMobileTick = 0;
 function mainLoop() {
-    if (document.hidden) {
+    if (document.hidden || isMobile) {
         isLoopRunning = false;
         animationFrameId = null;
         return;
     }
     animationFrameId = requestAnimationFrame(mainLoop);
     isLoopRunning = true;
-    
-    // Mobile: skip heavy canvas work & throttle to ~20fps to save battery (XS Max)
-    if (isMobile) {
-        const now = performance.now();
-        if (now - lastMobileTick < 50) return; // ~20fps on mobile vs 60fps desktop
-        lastMobileTick = now;
-        // Skip visualizer/sakura entirely on mobile; sparkles at reduced rate
-        if (Math.random() < 0.5) tickSparkles(); // half rate
-    } else {
-        tickVisualizer();
-        tickSakura();
-        tickSparkles();
-        if (!isTouch) tickCursor();
-    }
+
+    tickVisualizer();
+    tickSakura();
+    tickSparkles();
+    if (!isTouch) tickCursor();
 }
 
 document.addEventListener('visibilitychange', () => {

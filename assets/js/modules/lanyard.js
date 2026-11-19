@@ -2,8 +2,8 @@
 // LANYARD MODULE: Discord Live Presence & Spotify
 // ==========================================
 
-import { DISCORD_ID, cfg, formatTime } from './core.js';
-import { playYouTubeTrack } from './audio.js';
+import { DISCORD_ID, cfg, formatTime } from './core.js?v=9.3';
+import { playYouTubeTrack } from './audio.js?v=9.7';
 
 const statusColors = { online: '#a6da95', idle: '#f9e2af', dnd: '#f38ba8', offline: '#a6adc8' };
 
@@ -145,6 +145,16 @@ export function updatePresence(d) {
 
         // Display Name & Global Name
         const nameTextEl = document.getElementById('name-text');
+        if (u.primary_guild?.identity_enabled && u.primary_guild?.tag) {
+            const clanTagEl = document.getElementById('clan-tag');
+            const clanNameEl = document.getElementById('clan-name');
+            const clanBadgeEl = document.getElementById('clan-badge');
+            if (clanTagEl) clanTagEl.classList.remove('hidden');
+            if (clanNameEl) clanNameEl.textContent = u.primary_guild.tag;
+            if (clanBadgeEl && u.primary_guild.identity_guild_id && u.primary_guild.badge) {
+                clanBadgeEl.src = `https://cdn.discordapp.com/clan-badges/${u.primary_guild.identity_guild_id}/${u.primary_guild.badge}.png?size=64`;
+            }
+        }
         if (nameTextEl) {
             nameTextEl.textContent = u.global_name || u.display_name || cfg.displayName || u.username;
         }
@@ -199,7 +209,8 @@ export function updatePresence(d) {
                 if (cs.emoji) {
                     if (cs.emoji.id) {
                         const ext = cs.emoji.animated ? 'gif' : 'webp';
-                        html += `<img src="https://cdn.discordapp.com/emojis/${cs.emoji.id}.${ext}?size=48&quality=lossless" class="custom-status-emoji" alt="${cs.emoji.name}"> `;
+                        const safeEmojiName = (cs.emoji.name || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        html += `<img src="https://cdn.discordapp.com/emojis/${cs.emoji.id}.${ext}?size=48&quality=lossless" class="custom-status-emoji" alt="${safeEmojiName}"> `;
                     } else if (cs.emoji.name) {
                         html += cs.emoji.name + ' ';
                     }
@@ -295,11 +306,9 @@ export function updatePresence(d) {
         const hasListening = !!listAct && !!listeningEl;
         const hasGame = !!mainAct && !!gameEl;
 
-        if (hasListening || hasGame) {
-            if (activityCard) activityCard.classList.remove('hidden');
-        } else {
-            if (activityCard) activityCard.classList.add('hidden');
-        }
+        const emptyActivityEl = document.getElementById('activity-empty');
+        if (activityCard) activityCard.classList.remove('hidden');
+        if (emptyActivityEl) emptyActivityEl.classList.toggle('hidden', hasListening || hasGame);
 
         // --- Listening Box (Spotify / YouTube Music / etc.) ---
         if (hasListening) {
@@ -609,6 +618,7 @@ export function updatePresence(d) {
                         btn.className = 'rp-button';
                         btn.textContent = btnText;
                         btn.target = "_blank";
+                        btn.rel = "noopener noreferrer";
                         let url = mainAct.details_url || mainAct.state_url;
                         if (url) btn.href = url;
                         buttonsContainer.appendChild(btn);
