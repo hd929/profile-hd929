@@ -7,3 +7,6 @@ Thumbs.db
 tmp*.txt
 temp.txt
 .backup/
+
+# Rust build output
+/target
